@@ -10,13 +10,13 @@ import (
 // 批处理延迟任务队列
 type Queue struct {
 	sync.RWMutex
-	taskList         TaskList
-	timeUnit         uint64
-	startTime        time.Time
-	numTasksPerBatch int
-	runnerChannel    chan []Task
-	isInitialized    bool
-	numTasks         uint64
+	taskList         TaskList    //任务列表
+	timeUnit         uint64      // 一个时间单位包含的纳秒数。这是任务执行的最小时间间隔。
+	startTime        time.Time   //开始时间
+	numTasksPerBatch int         //批处理最大的任务数目。
+	runnerChannel    chan []Task //正在执行中的任务
+	isInitialized    bool        //是否初始化
+	numTasks         uint64      //队列中的任务数量
 }
 
 type InitOptions struct {
@@ -83,6 +83,7 @@ func (q *Queue) RemoveTasks(task Task) {
 
 	q.Lock()
 	current := q.taskList.head
+	//head就等于task的情况要特殊处理
 	for ; current != nil && current.task == task; current = current.next {
 		q.taskList.head = current.next
 		q.numTasks--
@@ -143,7 +144,9 @@ func (q *Queue) start() {
 			continue
 		}
 		tasks := make([]Task, q.numTasksPerBatch)
+		//过期的任务
 		expiredTasks := make([]Task, q.numTasksPerBatch)
+		//没过期的任务
 		aliveRunners := make([]*Runner, q.numTasksPerBatch)
 		now := q.Now()
 		taskCount := 0
@@ -163,6 +166,7 @@ func (q *Queue) start() {
 			if taskCount >= q.numTasksPerBatch {
 				q.runnerChannel <- tasks
 				q.numTasks -= uint64(len(tasks))
+				//批量执行一次后，重置相关值
 				tasks = make([]Task, q.numTasksPerBatch)
 				taskCount = 0
 				numExpiredTasks = 0
